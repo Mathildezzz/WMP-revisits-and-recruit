@@ -78,12 +78,46 @@ SELECT
        COUNT(DISTINCT CASE WHEN wecom.crm_member_id IS NOT NULL THEN mbr.member_detail_id ELSE NULL END)                     AS add_wecom_member,
        COUNT(DISTINCT CASE WHEN wecom_current_status.member_detail_id IS NOT NULL THEN mbr.member_detail_id ELSE NULL END)   AS add_wecom_member_still_added,
        COUNT(DISTINCT CASE WHEN wecom.latest_wecom_channel_source = '乐高小程序' THEN mbr.member_detail_id ELSE NULL END)    AS add_wecom_through_wmp_member,
-       COUNT(DISTINCT CASE WHEN wecom.latest_wecom_channel_source = '乐高小程序' AND wecom_current_status.member_detail_id IS NOT NULL THEN mbr.member_detail_id ELSE NULL END)    AS add_wecom_through_wmp_member_and_still_added
+       COUNT(DISTINCT CASE WHEN wecom.latest_wecom_channel_source = '乐高小程序' AND wecom_current_status.member_detail_id IS NOT NULL THEN mbr.member_detail_id ELSE NULL END)    AS add_wecom_through_wmp_member_and_still_added,
+       
+       COUNT(DISTINCT CASE WHEN wecom.crm_member_id IS NOT NULL AND ltd_lcs_converted.omni_channel_member_id IS NOT NULL THEN mbr.member_detail_id ELSE NULL END)                  AS add_wecom_and_ltd_converted_member,
+       COUNT(DISTINCT CASE WHEN wecom.latest_wecom_channel_source = '乐高小程序' AND ltd_lcs_converted.omni_channel_member_id IS NOT NULL THEN mbr.member_detail_id ELSE NULL END) AS add_wecom_through_wmp_and_ltd_converted_member,
+       COUNT(DISTINCT CASE WHEN wecom.crm_member_id IS NOT NULL AND ytd_lcs_converted.omni_channel_member_id IS NOT NULL THEN mbr.member_detail_id ELSE NULL END)                  AS add_wecom_and_ytd_converted_member,
+       COUNT(DISTINCT CASE WHEN wecom.latest_wecom_channel_source = '乐高小程序' AND ytd_lcs_converted.omni_channel_member_id IS NOT NULL THEN mbr.member_detail_id ELSE NULL END) AS add_wecom_through_wmp_and_ytd_converted_member
  FROM edw.d_member_detail mbr
  LEFT JOIN wecom
         ON mbr.member_detail_id::integer = wecom.crm_member_id::integer
  LEFT JOIN wecom_current_status
         ON mbr.member_detail_id::integer = wecom_current_status.member_detail_id::integer
+ LEFT JOIN (        
+            select DISTINCT
+                case when tr.type_name in ('CRM_memberid', 'DY_openid', 'TMALL_kyid') then coalesce(cast(mbr.id as varchar), cast(tr.type_value as varchar)) else null end as omni_channel_member_id -- 优先取member_detail_id，缺失情况下再取渠道内部id
+                from edw.f_omni_channel_order_detail as tr
+            left join edw.f_crm_member_detail as mbr
+                  on cast(tr.crm_member_detail_id as varchar) = cast(mbr.member_id as varchar)
+                where 1 = 1
+                and source_channel in ('LCS')
+                and date(tr.order_paid_date) < current_date
+                and ((tr.source_channel = 'LCS' and sales_type <> 3) or (tr.source_channel in ('TMALL', 'DOUYIN', 'DOUYIN_B2B') and tr.order_type = 'normal')) -- specific filtering for LCS, TM and DY
+                and if_eff_order_tag = TRUE
+          ) ltd_lcs_converted
+        ON mbr.member_detail_id::text = ltd_lcs_converted.omni_channel_member_id::text
+ LEFT JOIN (        
+            select DISTINCT
+                date(tr.order_paid_date) as order_paid_date,
+                source_channel,
+                case when tr.type_name in ('CRM_memberid', 'DY_openid', 'TMALL_kyid') then coalesce(cast(mbr.id as varchar), cast(tr.type_value as varchar)) else null end as omni_channel_member_id -- 优先取member_detail_id，缺失情况下再取渠道内部id
+                from edw.f_omni_channel_order_detail as tr
+                 left join edw.f_crm_member_detail as mbr
+                  on cast(tr.crm_member_detail_id as varchar) = cast(mbr.member_id as varchar)
+              where 1 = 1
+                and source_channel in ('LCS')
+                and date(tr.order_paid_date) < current_date
+                and ((tr.source_channel = 'LCS' and sales_type <> 3) or (tr.source_channel in ('TMALL', 'DOUYIN', 'DOUYIN_B2B') and tr.order_type = 'normal')) -- specific filtering for LCS, TM and DY
+                and if_eff_order_tag = TRUE
+          ) ytd_lcs_converted
+        ON mbr.member_detail_id::text = ytd_lcs_converted.omni_channel_member_id::text
+      AND extract('year' FROM mbr.join_time) = extract('year' FROM ytd_lcs_converted.order_paid_date)
  WHERE eff_reg_channel  = 'BRANDWMP'
  GROUP BY 1
  )
@@ -97,6 +131,16 @@ SELECT
         CAST(add_wecom_member_still_added AS FLOAT)/add_wecom_member AS wecom_still_added_ratio,
         add_wecom_through_wmp_member,
         add_wecom_through_wmp_member_and_still_added,
-        CAST(add_wecom_through_wmp_member_and_still_added AS FLOAT)/add_wecom_through_wmp_member AS wecom_through_wmp_still_added_ratio
+        CAST(add_wecom_through_wmp_member_and_still_added AS FLOAT)/add_wecom_through_wmp_member AS wecom_through_wmp_still_added_ratio,
+        
+        add_wecom_and_ltd_converted_member,
+        add_wecom_through_wmp_and_ltd_converted_member,
+        CAST(add_wecom_and_ltd_converted_member AS FLOAT)/add_wecom_member                         AS add_wecom_ltd_CR,
+        CAST(add_wecom_through_wmp_and_ltd_converted_member AS FLOAT)/add_wecom_through_wmp_member AS add_wecom_through_wmp_member_ltd_CR,
+        
+        add_wecom_and_ytd_converted_member,
+        add_wecom_through_wmp_and_ytd_converted_member,
+        CAST(add_wecom_and_ytd_converted_member AS FLOAT)/add_wecom_member                         AS add_wecom_ytd_CR,
+        CAST(add_wecom_through_wmp_and_ytd_converted_member AS FLOAT)/add_wecom_through_wmp_member AS add_wecom_through_wmp_member_ytd_CR
  FROM CTE;
  
