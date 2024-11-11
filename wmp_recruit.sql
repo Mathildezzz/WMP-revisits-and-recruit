@@ -86,15 +86,15 @@ SELECT
        COUNT(DISTINCT CASE WHEN wecom.latest_wecom_channel_source = '乐高小程序' AND ytd_lcs_converted.omni_channel_member_id IS NOT NULL THEN mbr.member_detail_id ELSE NULL END) AS add_wecom_through_wmp_and_ytd_converted_member
  FROM edw.d_member_detail mbr
  LEFT JOIN wecom
-        ON mbr.member_detail_id::integer = wecom.crm_member_id::integer
+        ON mbr.member_detail_id::text = CAST(wecom.crm_member_id::integer AS text)
  LEFT JOIN wecom_current_status
-        ON mbr.member_detail_id::integer = wecom_current_status.member_detail_id::integer
+        ON mbr.member_detail_id::text = CAST(wecom_current_status.member_detail_id::integer AS text)
  LEFT JOIN (        
             select DISTINCT
                 case when tr.type_name in ('CRM_memberid', 'DY_openid', 'TMALL_kyid') then coalesce(cast(mbr.id as varchar), cast(tr.type_value as varchar)) else null end as omni_channel_member_id -- 优先取member_detail_id，缺失情况下再取渠道内部id
                 from edw.f_omni_channel_order_detail as tr
             left join edw.f_crm_member_detail as mbr
-                  on cast(tr.crm_member_detail_id as varchar) = cast(mbr.member_id as varchar)
+                  on cast(tr.crm_member_detail_id as text) = cast(mbr.member_id as text)
                 where 1 = 1
                 and source_channel in ('LCS')
                 and date(tr.order_paid_date) < current_date
@@ -109,7 +109,7 @@ SELECT
                 case when tr.type_name in ('CRM_memberid', 'DY_openid', 'TMALL_kyid') then coalesce(cast(mbr.id as varchar), cast(tr.type_value as varchar)) else null end as omni_channel_member_id -- 优先取member_detail_id，缺失情况下再取渠道内部id
                 from edw.f_omni_channel_order_detail as tr
                  left join edw.f_crm_member_detail as mbr
-                  on cast(tr.crm_member_detail_id as varchar) = cast(mbr.member_id as varchar)
+                 on cast(tr.crm_member_detail_id as text) = cast(mbr.member_id as text)
               where 1 = 1
                 and source_channel in ('LCS')
                 and date(tr.order_paid_date) < current_date
@@ -143,4 +143,3 @@ SELECT
         CAST(add_wecom_and_ytd_converted_member AS FLOAT)/add_wecom_member                         AS add_wecom_ytd_CR,
         CAST(add_wecom_through_wmp_and_ytd_converted_member AS FLOAT)/add_wecom_through_wmp_member AS add_wecom_through_wmp_member_ytd_CR
  FROM CTE;
- 
