@@ -1,3 +1,6 @@
+delete from tutorial.mz_wmp_member_0_1_by_days_since_reg;  -- for the subsequent update
+insert into tutorial.mz_wmp_member_0_1_by_days_since_reg
+
 WITH reg AS (
  SELECT DISTINCT
        DATE(mbr.join_time) AS join_dt,
